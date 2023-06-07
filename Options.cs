@@ -56,9 +56,9 @@ namespace GradeAdjustedDistance
             File.WriteAllText(fileName, json);
         }
 
-            //Default formula - //=POWER(A2,2)*15.14+A2*2.896+1.0098
+        //Default formula - //=POWER(A2,2)*15.14+A2*2.896+1.0098
 
-            [Description("Multiplier for X squared where X is the slope")]
+        [Description("Multiplier for X squared where X is the slope")]
         public double GradeAdjustmentX2 { get; set; } = 15.14;
 
         [Description("Multiplier for X where X is the slope")]
@@ -75,6 +75,14 @@ namespace GradeAdjustedDistance
 
         [Description("Show line for cost adjustment")]
         public bool ShowCost { get; set; } = false;
+
+        public enum ColorElevation { Cost, Slope, None };
+
+        [Description("Color the elevation line with another metric")]
+        public ColorElevation ColorElevationMetric { get; set; } = ColorElevation.Slope;
+
+        [Description("Show line for cost as markers (coloured)")]
+        public bool ShowColorMarkers { get; set; } = false;
 
         [Description("Show line for raw elevation changes")]
         public bool ShowRawElevationChanges { get; set; } = false;

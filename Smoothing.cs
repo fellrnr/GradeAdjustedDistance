@@ -91,9 +91,10 @@ namespace GradeAdjustedDistance
             return retval;
         }
 
-        public static double[] WindowSmoothed(double[] rawData, int windowSize)
+        public static List<double> WindowSmoothed(double[] rawData, int windowSize)
         {
-            double[] smoothed = new double[rawData.Length];
+            //double[] smoothed = new double[rawData.Length];
+            List<double> smoothed = new List<double>();
             double[] buffer = new double[windowSize];
 
 
@@ -111,15 +112,15 @@ namespace GradeAdjustedDistance
                 bufferIndex = (bufferIndex + 1) % windowSize;
 
                 // calculate the average
-                smoothed[i] = ((double)sum) / windowSize;
+                smoothed.Add(((double)sum) / windowSize);
             }
 
             return smoothed;
         }
 
-        public static double[] SimpleExponentialSmoothed(double[] rawData, int windowSize)
+        public static List<double> SimpleExponentialSmoothed(double[] rawData, int windowSize)
         {
-            double[] smoothed = new double[rawData.Length];
+            List<double> smoothed = new List<double>();
 
 
             int smoothCounter = 0;
@@ -134,7 +135,7 @@ namespace GradeAdjustedDistance
 
                 smoothedValue = (smoothedValue * (smoothCounter - 1.0) / smoothCounter) + nextInput / smoothCounter;
                 // calculate the average
-                smoothed[i] = smoothedValue;
+                smoothed.Add(smoothedValue);
             }
 
             return smoothed;

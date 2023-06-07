@@ -17,10 +17,12 @@
  */
 using Gpx;
 using ScottPlot;
+using ScottPlot.Plottable;
 using ScottPlot.Renderable;
 using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace GradeAdjustedDistance
 {
@@ -36,11 +38,16 @@ namespace GradeAdjustedDistance
                 {
                     LoadFile(file);
                     SaveRecentFile(args[0]);
+                    UpdateTitle(args[0]);
                 }
 
             }
         }
 
+        private void UpdateTitle(string filename)
+        {
+            this.Text = "Fellrnr Grade Adjusted Distance " + filename;
+        }
 
         private void openGPXToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -56,6 +63,7 @@ namespace GradeAdjustedDistance
                 {
                     LoadFile(openFileDialog.OpenFile());
 
+                    UpdateTitle(openFileDialog.FileName);
                     SaveRecentFile(openFileDialog.FileName);
                 }
             }
@@ -64,17 +72,18 @@ namespace GradeAdjustedDistance
 
         private void LoadFile(Stream file)
         {
+            reverse = false;
             totalGradeAdjustedDistance = 0;
             totalDistance = 0;
             totalDistance3d = 0;
             totalAscent = 0;
             totalGradeAdjustedDistance = 0;
             costChart = new List<double>();
-            slopeChart = new List<double>();
+            rawSlopeChart = new List<double>();
             cumulativeDistance = new List<double>();
             distancesBetween = new List<double>();
             altitudeChart = new List<double>();
-            rawElevationChanges = new List<double>();
+            elevationChanges = new List<double>();
 
             ProcessGPX(file);
         }
@@ -95,11 +104,11 @@ namespace GradeAdjustedDistance
                             break;
                         case GpxObjectType.Route:
                             GpxRoute gpxRoute = reader.Route;
-                            ProcessRoute(gpxRoute);
+                            ProcessGpxRoute(gpxRoute);
                             break;
                         case GpxObjectType.Track:
                             GpxTrack gpxTrack = reader.Track;
-                            ProcessRoute(gpxTrack);
+                            LoadTrack(gpxTrack);
 
                             break;
                     }
@@ -107,9 +116,9 @@ namespace GradeAdjustedDistance
             }
         }
 
-        private void ProcessRoute(GpxTrack gpxTrack)
+        private void LoadTrack(GpxTrack gpxTrack)
         {
-            GpxPointCollection<GpxPoint> gpxPoints = new GpxPointCollection<GpxPoint>();
+            gpxPoints.Clear();
 
             foreach (GpxTrackSegment segment in gpxTrack.Segments)
             {
@@ -121,145 +130,183 @@ namespace GradeAdjustedDistance
                 }
             }
 
-            ProcessRoute(gpxPoints);
+            ProcessGpxPoints();
         }
 
-        private void ProcessRoute(GpxRoute gpxRoute)
+        private void ProcessGpxRoute(GpxRoute gpxRoute)
         {
-            GpxPointCollection<GpxPoint> gpxPoints = gpxRoute.ToGpxPoints();
+            gpxPoints.Clear();
+            gpxPoints = gpxRoute.ToGpxPoints();
 
-            ProcessRoute(gpxPoints);
+            ProcessGpxPoints();
         }
-        private void ProcessRoute(GpxPointCollection<GpxPoint> gpxPoints)
+        private void ProcessGpxPoints()
         {
             //GpxPointCollection<GpxRoutePoint> gpxRoutePoints = gpxRoute.RoutePoints;
 
 
             GpxPoint? lastPoint = null;
-            List<double> cumulativeDistanceTmp = new List<double>();
-            List<double> altitudeChartTmp = new List<double>();
             double totalDistanceTmp = 0;
-            foreach (GpxPoint gpxPoint in gpxPoints)
+            cumulativeDistance.Clear();
+            altitudeChart.Clear();
+            IEnumerable<GpxPoint> orderedPoints = reverse? gpxPoints.Reverse() : gpxPoints;
+            foreach (GpxPoint gpxPoint in orderedPoints)
             {
-                if(lastPoint != null && gpxPoint.Elevation != null && lastPoint.Elevation != null)
+                if (lastPoint != null && gpxPoint.Elevation != null && lastPoint.Elevation != null)
                 {
                     double distanceBetween = gpxPoint.GetDistanceFrom(lastPoint) * 1000; //Km to meters
                     double elevationChange = (double)gpxPoint.Elevation - (double)lastPoint.Elevation;
                     totalDistanceTmp += distanceBetween;
-                    cumulativeDistanceTmp.Add(totalDistanceTmp);
-                    altitudeChartTmp.Add((double)gpxPoint.Elevation);
+                    cumulativeDistance.Add(totalDistanceTmp);
+                    altitudeChart.Add((double)gpxPoint.Elevation);
                 }
                 lastPoint = gpxPoint;
             }
 
-            if (Options.Instance.SmoothingType != Options.Smoothing.None)
+            if(altitudeChart.Count == 0)
             {
-                Tuple<List<double>, List<double>> interpolatedLists = Smoothing.Interpolate(cumulativeDistanceTmp, altitudeChartTmp);
-                cumulativeDistance = interpolatedLists.Item1;
-                altitudeChart = interpolatedLists.Item2;
+                MessageBox.Show("Sorry, this GPX file has no altitude data");
+                return;
             }
-            else
-            {
-                cumulativeDistance = cumulativeDistanceTmp;
-                altitudeChart = altitudeChartTmp;
-            }
+
+            //if (Options.Instance.SmoothingType != Options.Smoothing.None)
+            //{
+            //    Tuple<List<double>, List<double>> interpolatedLists = Smoothing.Interpolate(cumulativeDistanceTmp, altitudeChartTmp);
+            //    cumulativeDistance = interpolatedLists.Item1;
+            //    altitudeChart = interpolatedLists.Item2;
+            //}
+            //else
+            //{
+            //    cumulativeDistance = cumulativeDistanceTmp;
+            //    altitudeChart = altitudeChartTmp;
+            //}
+            CalculateElevationAndDistanceChanges();
+
+            ProcessElevationChanges();
+        }
+
+        private void CalculateElevationAndDistanceChanges()
+        {
+            elevationChanges.Clear();
+            distancesBetween.Clear();
             double lastAltitude = altitudeChart.First();
             double lastDistance = cumulativeDistance.First();
             for (int i = 0; i < cumulativeDistance.Count; i++)
             {
                 double elevationChange = altitudeChart[i] - lastAltitude;
                 lastAltitude = altitudeChart[i];
-                rawElevationChanges.Add(elevationChange);
+                elevationChanges.Add(elevationChange);
 
                 double distanceChange = cumulativeDistance[i] - lastDistance;
                 lastDistance = cumulativeDistance[i];
                 distancesBetween.Add(distanceChange);
             }
-
-            ProcessRoute();
         }
-
 
         double totalGradeAdjustedDistance = 0;
         double totalDistance = 0;
         double totalDistance3d = 0;
         double totalAscent = 0;
         double totalElevation = 0;
+        GpxPointCollection<GpxPoint> gpxPoints = new GpxPointCollection<GpxPoint>();
+        bool reverse = false;
         List<double> costChart = new List<double>();
-        List<double> slopeChart = new List<double>();
+        List<double> rawSlopeChart = new List<double>();
+        List<double> smoothedSlopeChart = new List<double>();
         List<double> cumulativeDistance = new List<double>();
         List<double> distancesBetween = new List<double>();
         List<double> altitudeChart = new List<double>();
-        List<double> rawElevationChanges = new List<double>();
+        List<double> elevationChanges = new List<double>();
         string results = "";
         private List<Axis> CurrentAxis { get; set; } = new List<Axis>();
 
-        private void ProcessRoute()
+        private void ProcessElevationChanges()
         {
             cumulativeDistance.Clear();
             costChart.Clear();
-            slopeChart.Clear();
+            rawSlopeChart.Clear();
             totalGradeAdjustedDistance = 0;
             totalDistance = 0;
             totalDistance3d = 0;
             totalAscent = 0;
             totalElevation = 0;
 
-            double[] smoothedElevationChanges;
-            if (Options.Instance.SmoothingType == Options.Smoothing.AverageWindow)
-                smoothedElevationChanges = Smoothing.WindowSmoothed(rawElevationChanges.ToArray(), Options.Instance.SmoothingWindow);
-            else if (Options.Instance.SmoothingType == Options.Smoothing.SimpleExponential)
-                smoothedElevationChanges = Smoothing.SimpleExponentialSmoothed(rawElevationChanges.ToArray(), Options.Instance.SmoothingWindow);
-            else
-                smoothedElevationChanges = rawElevationChanges.ToArray();
+            //double[] smoothedElevationChanges;
+            //if (Options.Instance.SmoothingType == Options.Smoothing.AverageWindow)
+            //    smoothedElevationChanges = Smoothing.WindowSmoothed(rawElevationChanges.ToArray(), Options.Instance.SmoothingWindow);
+            //else if (Options.Instance.SmoothingType == Options.Smoothing.SimpleExponential)
+            //    smoothedElevationChanges = Smoothing.SimpleExponentialSmoothed(rawElevationChanges.ToArray(), Options.Instance.SmoothingWindow);
+            //else
+            //    smoothedElevationChanges = rawElevationChanges.ToArray();
 
+
+            //work out the slope first
             for (int i = 0; i < distancesBetween.Count; i++)
             {
                 double distanceBetween = distancesBetween[i];
-                double elevationChange = smoothedElevationChanges[i];
+                double elevationChange = elevationChanges[i];
                 if (distanceBetween > 0)
                 {
 
                     double slope = elevationChange / distanceBetween;
 
-                    //constrain slope
+                    //constrain slope before smoothing. A discontinuity in the GPX will otherwise remain after smoothing
                     if (slope > Options.Instance.MaxSlope)
                         slope = Options.Instance.MaxSlope;
 
                     if (slope < Options.Instance.MinSlope)
                         slope = Options.Instance.MinSlope;
 
-                    //=POWER(A2,2)*15.14+A2*2.896+1.0098
-                    //double cost = Math.Pow(slope, 2) * 15.14 + slope * 2.896 + 1.0098;
-                    double cost = Math.Pow(slope, 2) * Options.Instance.GradeAdjustmentX2 + slope * Options.Instance.GradeAdjustmentX + Options.Instance.GradeAdjustmentOffset;
-                    double gradeAdjustedDistance = distanceBetween * cost;
-                    double distance3d = Math.Sqrt(Math.Pow(distanceBetween,2) + Math.Pow(elevationChange, 2));
-                    totalGradeAdjustedDistance += gradeAdjustedDistance;
-                    totalDistance += distanceBetween;
-                    totalDistance3d += distance3d;
+
                     totalElevation += elevationChange;
                     if (elevationChange > 0) { totalAscent += elevationChange; }
-                    costChart.Add(cost);
-                    slopeChart.Add(slope);
-                    cumulativeDistance.Add(totalDistance);
+                    rawSlopeChart.Add(slope);
+
+                    double distance3d = Math.Sqrt(Math.Pow(distanceBetween, 2) + Math.Pow(elevationChange, 2));
+                    totalDistance3d += distance3d;
+
                 }
                 else
                 {
-                    costChart.Add(1);
-                    slopeChart.Add(0);
-                    cumulativeDistance.Add(totalDistance);
+                    rawSlopeChart.Add(0);
                 }
             }
-            UpdateGraphs(smoothedElevationChanges);
+
+            if (Options.Instance.SmoothingType == Options.Smoothing.AverageWindow)
+                smoothedSlopeChart = Smoothing.WindowSmoothed(rawSlopeChart.ToArray(), Options.Instance.SmoothingWindow);
+            else if (Options.Instance.SmoothingType == Options.Smoothing.SimpleExponential)
+                smoothedSlopeChart = Smoothing.SimpleExponentialSmoothed(rawSlopeChart.ToArray(), Options.Instance.SmoothingWindow);
+            else
+                smoothedSlopeChart = rawSlopeChart;
+
+
+            //then calculate cost from smoothed grade (which is the same as smoothing elevation weighted by distance)
+            for (int i = 0; i < distancesBetween.Count; i++)
+            {
+                double distanceBetween = distancesBetween[i];
+                double slope = smoothedSlopeChart[i];
+
+                //=POWER(A2,2)*15.14+A2*2.896+1.0098
+                //double cost = Math.Pow(slope, 2) * 15.14 + slope * 2.896 + 1.0098;
+                double cost = Math.Pow(slope, 2) * Options.Instance.GradeAdjustmentX2 + slope * Options.Instance.GradeAdjustmentX + Options.Instance.GradeAdjustmentOffset;
+                double gradeAdjustedDistance = distanceBetween * cost;
+                totalGradeAdjustedDistance += gradeAdjustedDistance;
+                totalDistance += distanceBetween;
+                costChart.Add(cost);
+                cumulativeDistance.Add(totalDistance);
+            }
+
+            UpdateGraphs();
         }
-        public void UpdateGraphs(double[] smoothedElevationChanges)
+        public void UpdateGraphs()
         {
             formsPlot1.Plot.Clear();
             foreach (Axis axis in CurrentAxis) { formsPlot1.Plot.RemoveAxis(axis); }
             CurrentAxis.Clear();
 
             results = string.Format("Distance {0:N} Km, Grade Adjusted Distance {1:N} Km, 3D Distance {2:n} Km, total ascent {3:N}m, net elevation {4:N}m", totalDistance / 1000,           totalGradeAdjustedDistance / 1000, totalDistance3d / 1000, totalAscent, totalElevation);
-            
+
+            int elevationIndex = 0;
             formsPlot1.Plot.XAxis2.Label(results);
             var elevationGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), altitudeChart.ToArray());
             formsPlot1.Plot.YAxis.Label("Elevation");
@@ -268,7 +315,6 @@ namespace GradeAdjustedDistance
 
             Axis yAxis;
             int arrayIndex = 1;
-
             if (Options.Instance.ShowCost)
             {
                 var costGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), costChart.ToArray());
@@ -285,7 +331,7 @@ namespace GradeAdjustedDistance
 
             if (Options.Instance.ShowSmoothedElevationChanges)
             {
-                var elevationChangesGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), smoothedElevationChanges);
+                var elevationChangesGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), elevationChanges.ToArray());
                 yAxis = formsPlot1.Plot.AddAxis(ScottPlot.Renderable.Edge.Left);
                 if (yAxis != null)
                 {
@@ -300,7 +346,7 @@ namespace GradeAdjustedDistance
 
             if (Options.Instance.ShowSlope)
             {
-                var slopeGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), slopeChart.ToArray());
+                var slopeGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), smoothedSlopeChart.ToArray());
                 yAxis = formsPlot1.Plot.AddAxis(ScottPlot.Renderable.Edge.Left);
                 if (yAxis != null)
                 {
@@ -314,7 +360,7 @@ namespace GradeAdjustedDistance
 
             if (Options.Instance.ShowRawElevationChanges)
             {
-                var rawElevationChangesGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), rawElevationChanges.ToArray());
+                var rawElevationChangesGraph = formsPlot1.Plot.AddScatter(cumulativeDistance.ToArray(), elevationChanges.ToArray());
                 yAxis = formsPlot1.Plot.AddAxis(ScottPlot.Renderable.Edge.Left);
                 if (yAxis != null)
                 {
@@ -323,6 +369,47 @@ namespace GradeAdjustedDistance
                     rawElevationChangesGraph.YAxisIndex = yAxis.AxisIndex;
                     yAxis.Label("Raw Elevation Changes");
                     CurrentAxis.Add(yAxis);
+                }
+            }
+
+            if (Options.Instance.ShowColorMarkers && Options.Instance.ColorElevationMetric != Options.ColorElevation.None)
+            {
+                List<double> colorChart;
+
+                if (Options.Instance.ColorElevationMetric == Options.ColorElevation.Cost)
+                    colorChart = costChart;
+                else
+                    colorChart = smoothedSlopeChart;
+
+                double minCost = colorChart.Min();
+                double maxCost = colorChart.Max();
+                for (int i = 0; i < cumulativeDistance.Count; i++)
+                {
+                    double colorValue = colorChart[i];
+                    double percent = ((colorValue - minCost) / (maxCost - minCost)) * 100.0;
+                    int red;
+                    int green;
+                    Color color;
+                    if (percent < 50)
+                    {
+                        green = 255;
+                        red = (int)Math.Round(percent * 5.10);
+                        color = Color.FromArgb(255, (int)red, (int)green, 0);
+                    }
+                    else
+                    {
+                        red = 255;
+                        double percentGreen = percent - 50.0;
+                        double ratioGreen = percentGreen * 5.10;
+                        double unroundedGreen = 255 - ratioGreen;
+                        green = (int)Math.Round(unroundedGreen);
+                        color = Color.FromArgb(255, (int)red, (int)green, 0);
+                    }
+                    //var green = percent < 50 ? 255 : Math.Round(256 - (percent - 50) * 5.12);
+                    //var red = percent > 50 ? 255 : Math.Round((percent) * 5.12);
+                    //Color color = Color.FromArgb(255, (int)red, (int)green, 0);
+                    MarkerPlot markerPlot = formsPlot1.Plot.AddMarker(cumulativeDistance[i], altitudeChart[i], MarkerShape.filledCircle, 10, color);
+                    markerPlot.YAxisIndex = elevationIndex;
                 }
             }
 
@@ -373,7 +460,7 @@ namespace GradeAdjustedDistance
             OptionsForm1 optionsForm = new OptionsForm1();
             optionsForm.ShowDialog();
             if (cumulativeDistance.Count > 0)
-                ProcessRoute();
+                ProcessElevationChanges();
         }
 
         private void copyResultsToolStripMenuItem_Click(object sender, EventArgs e)
@@ -381,7 +468,7 @@ namespace GradeAdjustedDistance
             Clipboard.SetText(results);
         }
 
-        const int MRUnumber = 6;
+        const int MRUnumber = 20;
         System.Collections.Generic.Queue<string> MRUlist = new Queue<string>();
 
         private void GradeAdjustedDistance_Load(object sender, EventArgs e)
@@ -465,5 +552,13 @@ namespace GradeAdjustedDistance
         {
             Options.SaveOptions();
         }
+
+        private void reverseRouteToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            reverse = !reverse;
+            ProcessGpxPoints();
+
+        }
+
     }
 }

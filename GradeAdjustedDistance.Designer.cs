@@ -37,6 +37,7 @@
             this.copyResultsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.recentToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.formsPlot1 = new ScottPlot.FormsPlot();
+            this.reverseRouteToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -81,7 +82,8 @@
             // 
             this.editToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.optionsToolStripMenuItem,
-            this.copyResultsToolStripMenuItem});
+            this.copyResultsToolStripMenuItem,
+            this.reverseRouteToolStripMenuItem});
             this.editToolStripMenuItem.Name = "editToolStripMenuItem";
             this.editToolStripMenuItem.Size = new System.Drawing.Size(58, 29);
             this.editToolStripMenuItem.Text = "Edit";
@@ -89,14 +91,14 @@
             // optionsToolStripMenuItem
             // 
             this.optionsToolStripMenuItem.Name = "optionsToolStripMenuItem";
-            this.optionsToolStripMenuItem.Size = new System.Drawing.Size(216, 34);
+            this.optionsToolStripMenuItem.Size = new System.Drawing.Size(270, 34);
             this.optionsToolStripMenuItem.Text = "Options...";
             this.optionsToolStripMenuItem.Click += new System.EventHandler(this.optionsToolStripMenuItem_Click);
             // 
             // copyResultsToolStripMenuItem
             // 
             this.copyResultsToolStripMenuItem.Name = "copyResultsToolStripMenuItem";
-            this.copyResultsToolStripMenuItem.Size = new System.Drawing.Size(216, 34);
+            this.copyResultsToolStripMenuItem.Size = new System.Drawing.Size(270, 34);
             this.copyResultsToolStripMenuItem.Text = "Copy Results";
             this.copyResultsToolStripMenuItem.Click += new System.EventHandler(this.copyResultsToolStripMenuItem_Click);
             // 
@@ -116,6 +118,13 @@
             this.formsPlot1.Name = "formsPlot1";
             this.formsPlot1.Size = new System.Drawing.Size(1727, 1055);
             this.formsPlot1.TabIndex = 1;
+            // 
+            // reverseRouteToolStripMenuItem
+            // 
+            this.reverseRouteToolStripMenuItem.Name = "reverseRouteToolStripMenuItem";
+            this.reverseRouteToolStripMenuItem.Size = new System.Drawing.Size(270, 34);
+            this.reverseRouteToolStripMenuItem.Text = "Reverse Route";
+            this.reverseRouteToolStripMenuItem.Click += new System.EventHandler(this.reverseRouteToolStripMenuItem_Click);
             // 
             // GradeAdjustedDistance
             // 
@@ -147,5 +156,6 @@
         private ToolStripMenuItem optionsToolStripMenuItem;
         private ToolStripMenuItem copyResultsToolStripMenuItem;
         private ToolStripMenuItem recentToolStripMenuItem;
+        private ToolStripMenuItem reverseRouteToolStripMenuItem;
     }
 }
